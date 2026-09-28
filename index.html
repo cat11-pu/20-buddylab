@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><title>buddylab 伙伴堆布局台</title>
+<style>
+body{font-family:system-ui,sans-serif;margin:0;background:#0b111a;color:#dbe6f2}
+.wrap{display:grid;grid-template-columns:minmax(480px,1fr) 340px;gap:14px;padding:16px;align-items:start}
+.card{background:#121a27;border:1px solid #223247;border-radius:12px;padding:12px}
+h2{font-size:12px;color:#8ba3bf;margin:10px 0 6px;letter-spacing:.4px}
+svg{background:#0a1119;border-radius:10px;display:block}
+input{font:inherit;width:76px;padding:4px 8px;border:1px solid #2a3d55;border-radius:8px;background:#0b1220;color:#dbe6f2}
+button{font:inherit;padding:5px 12px;margin:0 8px 8px 0;border:1px solid #2a3d55;border-radius:8px;background:#1a2536;color:#dbe6f2;cursor:pointer}
+button.main{background:#2f6bd8;border-color:#2f6bd8}
+.chip{display:inline-block;font-size:12px;padding:2px 9px;border-radius:999px;background:#1c2a3e;color:#9ec2ea;margin:0 6px 6px 0}
+.chip.bad{background:#3a1f27;color:#f5a3ae}
+.row{font:12px/1.7 ui-monospace,monospace;color:#a9c2dc}
+pre{background:#080e17;color:#8fc6ff;padding:10px;border-radius:8px;overflow:auto;font-size:12px;max-height:190px}
+</style></head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <svg id="tree" width="680" height="300" viewBox="0 0 680 300"></svg>
+    <div id="chips" style="margin-top:10px"></div>
+  </div>
+  <div class="card">
+    <h2>空闲表（按阶）</h2>
+    <div id="orders" class="row"></div>
+    <h2>已分配块</h2>
+    <div id="allocs" class="row"></div>
+    <h2>操作</h2>
+    <div>尺寸 <input id="size" type="number" value="3" min="1"> 编号 <input id="id" type="number" value="1" min="1"></div>
+    <div style="margin-top:8px"><button id="doAlloc" class="main">分配</button><button id="doFree">释放</button><button id="doStat">快照</button><button id="doReset">重置</button></div>
+    <h2>读数</h2>
+    <pre id="out"></pre>
+  </div>
+</div>
+<div id="scene" hidden>{
+  "state": {
+    "orders": 5,
+    "free": [[], [], [], [], [0]],
+    "allocs": [],
+    "splits": 0,
+    "merges": 0,
+    "granted": 0,
+    "released": 0,
+    "refused": 0,
+    "refuses": [],
+    "snaps": [],
+    "next": 1
+  },
+  "events": [
+    { "kind": "alloc", "size": 3 },
+    { "kind": "alloc", "size": 2 },
+    { "kind": "alloc", "size": 1 },
+    { "kind": "free", "id": 2 },
+    { "kind": "free", "id": 3 },
+    { "kind": "stat" },
+    { "kind": "alloc", "size": 4 },
+    { "kind": "free", "id": 1 },
+    { "kind": "alloc", "size": 9 },
+    { "kind": "alloc", "size": 3 },
+    { "kind": "alloc", "size": 2 },
+    { "kind": "stat" },
+    { "kind": "free", "id": 4 },
+    { "kind": "stat" },
+    { "kind": "alloc", "size": 5 },
+    { "kind": "free", "id": 6 },
+    { "kind": "alloc", "size": 5 },
+    { "kind": "free", "id": 5 },
+    { "kind": "alloc", "size": 1 },
+    { "kind": "free", "id": 8 }
+  ]
+}</div>
+<script type="module">
+import { render } from "./app.js";
+
+const start = JSON.parse(document.getElementById("scene").textContent);
+let spec = JSON.parse(JSON.stringify(start));
+const ns = "http://www.w3.org/2000/svg";
+
+function drawTree(view) {
+  const svg = document.getElementById("tree");
+  svg.textContent = "";
+  const top = Math.max(1, view.orders) - 1;
+  const wide = 620;
+  const left = 26;
+  const rowH = 32;
+  const freeAt = function (order, spot) {
+    const row = Array.isArray(view.free[order]) ? view.free[order] : [];
+    return row.indexOf(spot) >= 0;
+  };
+  const usedBy = function (order, spot) {
+    const hit = (view.allocs || []).find(function (item) {
+      return item[2] === order && item[1] === spot;
+    });
+    return hit ? hit[3] : 0;
+  };
+  const walk = function (spot, order) {
+    const span = Math.pow(2, top - order);
+    const x = left + (spot / Math.pow(2, order)) * wide;
+    const w = wide / span;
+    const y = 8 + (top - order) * rowH;
+    const taken = usedBy(order, spot);
+    const box = document.createElementNS(ns, "rect");
+    box.setAttribute("x", x + 1);
+    box.setAttribute("y", y);
+    box.setAttribute("width", Math.max(w - 2, 2));
+    box.setAttribute("height", rowH - 6);
+    box.setAttribute("rx", 5);
+    if (freeAt(order, spot)) {
+      box.setAttribute("fill", "#14402e");
+      box.setAttribute("stroke", "#2f9c6a");
+    } else if (taken > 0) {
+      box.setAttribute("fill", "#22386a");
+      box.setAttribute("stroke", "#5f8ee6");
+    } else {
+      box.setAttribute("fill", "none");
+      box.setAttribute("stroke", "#243449");
+    }
+    svg.appendChild(box);
+    if (order > 0 && !freeAt(order, spot) && taken === 0) {
+      walk(spot, order - 1);
+      walk(spot + Math.pow(2, order - 1), order - 1);
+      return;
+    }
+    if (!freeAt(order, spot) && taken === 0) {
+      return;
+    }
+    const text = document.createElementNS(ns, "text");
+    text.setAttribute("x", x + 7);
+    text.setAttribute("y", y + rowH / 2);
+    text.setAttribute("fill", "#cfe0f2");
+    text.setAttribute("font-size", "11");
+    text.textContent = freeAt(order, spot) ? "空块 " + spot : "占用 " + spot + " 要 " + taken;
+    svg.appendChild(text);
+  };
+  walk(0, top);
+  const legend = document.createElementNS(ns, "text");
+  legend.setAttribute("x", left);
+  legend.setAttribute("y", 8 + (top + 1) * rowH);
+  legend.setAttribute("fill", "#7d93ac");
+  legend.setAttribute("font-size", "11");
+  legend.textContent = "地址零在左，矩形宽度与块大小成正比；自上而下阶数递减，绿底空闲、蓝底已分配。";
+  svg.appendChild(legend);
+}
+
+function draw() {
+  let view = null;
+  try {
+    view = render(spec);
+  } catch (error) {
+    document.getElementById("out").textContent = "跑不动：" + error.message;
+    return;
+  }
+  drawTree(view);
+  const orders = document.getElementById("orders");
+  orders.textContent = "";
+  (view.free || []).forEach(function (row, order) {
+    const line = document.createElement("div");
+    line.textContent = "阶 " + order + "（每块 " + Math.pow(2, order) + " 格）："
+      + (row.length === 0 ? "无" : row.join(", "));
+    orders.appendChild(line);
+  });
+  const allocs = document.getElementById("allocs");
+  allocs.textContent = "";
+  if ((view.allocs || []).length === 0) {
+    allocs.textContent = "无";
+  }
+  (view.allocs || []).forEach(function (item) {
+    const line = document.createElement("div");
+    line.textContent = "编号 " + item[0] + "：地址 " + item[1] + "，阶 " + item[2] + "，要 " + item[3] + " 格";
+    allocs.appendChild(line);
+  });
+  const chips = document.getElementById("chips");
+  chips.textContent = "";
+  const chip = function (label, bad) {
+    const span = document.createElement("span");
+    span.className = bad ? "chip bad" : "chip";
+    span.textContent = label;
+    chips.appendChild(span);
+  };
+  chip("阶数 " + view.orders);
+  chip("可用单位 " + view.units + "／" + view.total);
+  chip("最大可满足请求 " + view.largest);
+  chip("分裂 " + view.splits + " 次");
+  chip("合并 " + view.merges + " 次");
+  chip("拒绝 " + view.refused + " 次", view.refused > 0);
+  chip("空闲表合法 " + view.legal, view.legal !== 1);
+  chip("铺满整堆 " + view.tiled, view.tiled !== 1);
+  chip("合并彻底 " + view.merged, view.merged !== 1);
+  document.getElementById("out").textContent = JSON.stringify({
+    空闲块总数: view.blocks, 可用单位数: view.units, 最大可满足请求: view.largest,
+    分配成功数: view.granted, 释放成功数: view.released, 分裂次数: view.splits,
+    合并次数: view.merges, 拒绝次数: view.refused, 编号水位: view.next,
+    快照记录: view.snaps, 异常事件数: view.failed_events
+  }, null, 1);
+}
+
+document.getElementById("doAlloc").addEventListener("click", function () {
+  spec.events.push({ kind: "alloc", size: Number(document.getElementById("size").value) });
+  draw();
+});
+document.getElementById("doFree").addEventListener("click", function () {
+  spec.events.push({ kind: "free", id: Number(document.getElementById("id").value) });
+  draw();
+});
+document.getElementById("doStat").addEventListener("click", function () {
+  spec.events.push({ kind: "stat" });
+  draw();
+});
+document.getElementById("doReset").addEventListener("click", function () {
+  spec = JSON.parse(JSON.stringify(start));
+  draw();
+});
+draw();
+</script>
+</body>
+</html>

@@ -1,0 +1,37 @@
+{
+  "state": {
+    "orders": 5,
+    "free": [[], [], [], [], [0]],
+    "allocs": [],
+    "splits": 0,
+    "merges": 0,
+    "granted": 0,
+    "released": 0,
+    "refused": 0,
+    "refuses": [],
+    "snaps": [],
+    "next": 1
+  },
+  "events": [
+    { "kind": "alloc", "size": 3 },
+    { "kind": "alloc", "size": 2 },
+    { "kind": "alloc", "size": 1 },
+    { "kind": "free", "id": 2 },
+    { "kind": "free", "id": 3 },
+    { "kind": "stat" },
+    { "kind": "alloc", "size": 4 },
+    { "kind": "free", "id": 1 },
+    { "kind": "alloc", "size": 9 },
+    { "kind": "alloc", "size": 3 },
+    { "kind": "alloc", "size": 2 },
+    { "kind": "stat" },
+    { "kind": "free", "id": 4 },
+    { "kind": "stat" },
+    { "kind": "alloc", "size": 5 },
+    { "kind": "free", "id": 6 },
+    { "kind": "alloc", "size": 5 },
+    { "kind": "free", "id": 5 },
+    { "kind": "alloc", "size": 1 },
+    { "kind": "free", "id": 8 }
+  ]
+}
